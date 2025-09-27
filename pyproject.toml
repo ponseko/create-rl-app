@@ -1,0 +1,17 @@
+[project]
+name = "create-rl-app"
+version = "0.0.1"
+description = "Bootstrap a new Reinforcement Learning project"
+readme = "README.md"
+authors = [
+    { name = "Koen Ponse", email = "k.ponse@liacs.leidenuniv.nl" }
+]
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+create-rl-app = "create_rl_app.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.8.4,<0.9.0"]
+build-backend = "uv_build"

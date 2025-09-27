@@ -1,0 +1,31 @@
+# Configuration for vendoring external library files
+vendor:
+    repository:
+        owner: "ponseko" # GitHub owner/org
+        repo: "jaxnasium" # Repository name
+        branch: "main" # Default branch to track
+
+    # Files and folders to vendor (relative to repository root)
+    files:
+        - "LICENSE"
+    
+    # Folders to vendor with inclusion/exclusion patterns
+    folders:
+        - path: "src/jaxnasium/algorithms"
+          # Include patterns (glob patterns, relative to folder path)
+          include:
+            - "*.py"
+            - "*.pyi"
+          # Exclude patterns (glob patterns, relative to folder path)
+          exclude:
+            - "utils"
+            - "test_*.py"
+            - "*_test.py"
+            - "__pycache__"
+            - "*.pyc"
+          # Preserve directory structure (default: true)
+          preserve_structure: true
+
+    # Destination directory in this project
+    destination: "src/create_rl_app/_vendored/jaxnasium"
+

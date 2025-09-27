@@ -1,0 +1,128 @@
+name: Check for new release
+
+on:
+  # schedule:
+    Run every 4 hours
+    - cron: '0 */4 * * *'
+
+concurrency:
+  group: new-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install uv
+          uv venv
+          source .venv/bin/activate
+          uv pip install requests toml pyyaml pytest uv
+
+      - name: Run vendor script
+        id: vendor
+        run: |
+          OUTPUT=$(uv run python scripts/vendor.py --config scripts/vendor_jaxnasium_config.yaml)
+          echo "$OUTPUT"
+          
+          # Parse the VENDOR_UPDATED status from the output
+          if echo "$OUTPUT" | grep -q "VENDOR_UPDATED=true"; then
+            echo "vendor_changed=0" >> $GITHUB_OUTPUT
+          else
+            echo "vendor_changed=1" >> $GITHUB_OUTPUT
+          fi
+
+      # Run tests
+      - name: Run tests
+        if: steps.vendor.outputs.vendor_changed == 0
+        run: |
+          uv pip install -r tests/_requirements.txt
+          uv run --no-sync pytest
+
+      - name: Update version if vendor changed
+        id: update_version
+        if: steps.vendor.outputs.vendor_changed == 0
+        run: |
+          # Get the vendored version from jaxnasium
+          VENDOR_VERSION=$(python -c "
+          import json
+          with open('src/create_rl_app/_vendored/jaxnasium/.vendor_info', 'r') as f:
+              data = json.load(f)
+              print(data['version'])
+          ")
+          
+          # Update pyproject.toml version by incrementing by 0.0.1
+          NEW_VERSION=$(python -c "
+          import re
+          
+          # Read current version from pyproject.toml
+          with open('pyproject.toml', 'r') as f:
+              content = f.read()
+          
+          # Extract current version
+          version_match = re.search(r'^version = \"(.*)\"', content, re.MULTILINE)
+          if version_match:
+              current_version = version_match.group(1)
+              parts = current_version.split('.')
+              major, minor, patch = int(parts[0]), int(parts[1]), int(parts[2])
+              # Increment by 0.0.1
+              new_patch = patch + 1
+              new_version = f'{major}.{minor}.{new_patch}'
+              print(new_version)
+          else:
+              exit(1)
+          ")
+          
+          python -c "
+          import re
+          
+          # Read pyproject.toml
+          with open('pyproject.toml', 'r') as f:
+              content = f.read()
+          
+          # Update version line
+          updated_content = re.sub(
+              r'^version = \".*\"',
+              f'version = \"$NEW_VERSION\"',
+              content,
+              flags=re.MULTILINE
+          )
+          
+          # Write back
+          with open('pyproject.toml', 'w') as f:
+              f.write(updated_content)
+          "
+          
+          echo "Updated version to $NEW_VERSION (jaxnasium: $VENDOR_VERSION)"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "vendor_version=$VENDOR_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Commit version update if vendor changed
+        if: steps.vendor.outputs.vendor_changed == 0
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add pyproject.toml
+          git add src/create_rl_app/_vendored/*/.vendor_info src/create_rl_app/_vendored/*/.vendor_version
+          git commit -m "[skip ci] Bump version to ${{ steps.update_version.outputs.new_version }} (jaxnasium: ${{ steps.update_version.outputs.vendor_version }})" || exit 0
+          git push
+
+      - name: Release
+        uses: patrick-kidger/action_update_python_project@v8
+        with:
+            python-version: "3.11"
+            checkout: false
+            test-script: |
+                echo "Tests have run prior to this step"
+            pypi-token: ${{ secrets.pypi_token }}
+            github-user: ponseko
+            github-token: ${{ github.token }}  # automatically created token

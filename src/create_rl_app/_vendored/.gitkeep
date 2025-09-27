@@ -1,0 +1,2 @@
+# This file ensures the vendored directory is tracked by git
+# even when empty. It will be removed when files are vendored.

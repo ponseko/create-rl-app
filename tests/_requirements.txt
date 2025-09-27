@@ -1,0 +1,4 @@
+pytest
+jaxnasium[algs]
+pipx
+uv

@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: new-release
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install uv
+          uv venv
+          source .venv/bin/activate
+          uv pip install requests toml pyyaml pytest uv
+
+      - name: Run vendor script
+        id: vendor
+        run: |
+          OUTPUT=$(uv run python scripts/vendor.py --config scripts/vendor_jaxnasium_config.yaml --force)
+          echo "$OUTPUT"
+          
+          # Parse the VENDOR_UPDATED status from the output
+          if echo "$OUTPUT" | grep -q "VENDOR_UPDATED=true"; then
+            echo "vendor_changed=0" >> $GITHUB_OUTPUT
+          else
+            echo "vendor_changed=1" >> $GITHUB_OUTPUT
+          fi
+          echo "Vendor update was forced"
+
+      # Run tests
+      - name: Run tests
+        run: |
+          uv pip install -r tests/_requirements.txt
+          uv run --no-sync pytest
+
+      - name: Release
+        uses: patrick-kidger/action_update_python_project@v8
+        with:
+            python-version: "3.11"
+            checkout: false
+            test-script: |
+                echo "Tests have run prior to this step"
+            pypi-token: ${{ secrets.pypi_token }}
+            github-user: ponseko
+            github-token: ${{ github.token }}  # automatically created token
