@@ -1,8 +1,8 @@
 name: Check for new release
 
 on:
-  # schedule:
-    Run every 4 hours
+  schedule:
+    # Run every 4 hours
     - cron: '0 */4 * * *'
 
 concurrency:
