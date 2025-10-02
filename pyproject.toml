@@ -1,6 +1,6 @@
 [project]
 name = "create-rl-app"
-version = "0.0.4"
+version = "0.0.5"
 description = "Bootstrap a new Reinforcement Learning project"
 readme = "README.md"
 authors = [
