@@ -28,9 +28,11 @@ def run_package_cli(package: str, argv: list) -> None:
 
     if command == "add":
         scaffold_from_installed(package, rest)
+        return
 
     if command == "init" and package == "jaxnasium":
         init.main(rest)
+        return
 
     raise SystemExit(
         f"Usage: {package} {'add|init' if package == 'jaxnasium' else 'add'} <item> [output]"
