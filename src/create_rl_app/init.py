@@ -106,7 +106,10 @@ def run_uv_init(projectname: str) -> None:
 def run_uv_add_jaxnasium(project_path: Path, *, installed: bool = False) -> None:
     jaxnasium_version = get_jaxnasium_version(installed=installed)
     command = _uv_or_pipx(
-        "add", "--quiet", "--no-sync", f"jaxnasium[algs]>={jaxnasium_version}"
+        "add",
+        "--quiet",
+        "--frozen",
+        f"jaxnasium[algs]>={jaxnasium_version}",
     )
     subprocess.run(command, check=True, cwd=project_path)
 
