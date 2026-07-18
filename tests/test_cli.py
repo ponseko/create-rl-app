@@ -81,22 +81,6 @@ def test_cli_sac(tmp_path):
     check_correct_initialized_and_runs(test_dir)
 
 
-def test_cli_neither_option(tmp_path):
-    test_dir = tmp_path / "test_project"
-    subprocess.run(
-        [
-            "uvx",
-            "--no-cache",
-            ".",
-            "init",
-            test_dir,
-            "-y",
-            "--no-algorithm-source",
-        ]
-    )
-    check_correct_initialized_and_runs(test_dir)
-
-
 def test_cli_environment(tmp_path):
     test_dir = tmp_path / "test_project"
     subprocess.run(
@@ -106,7 +90,7 @@ def test_cli_environment(tmp_path):
             ".",
             "init",
             test_dir,
-            "--algorithm-source",
+            "-y",
             "--environment",
             "Pendulum-v1",
         ]
