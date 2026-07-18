@@ -24,18 +24,23 @@ def scaffold_from_installed(package: str, argv) -> None:
 
 def run_package_cli(package: str, argv: list) -> None:
     """Handle `<package> add <item>`: scaffold from an installed package's own `create-rl-app.toml`, e.g. `uvx jaxnasium add ppo`."""
+    if not argv:
+        raise SystemExit(
+            f"Usage: {package} {'init|add' if package == 'jaxnasium' else 'add'} ..."
+        )
+
     command, *rest = argv
 
     if command == "add":
         scaffold_from_installed(package, rest)
         return
 
-    if command == "init" and package == "jaxnasium":
-        init.main(rest)
+    if package == "jaxnasium" and command == "init":
+        init.main(rest, use_installed_jaxnasium=True)
         return
 
     raise SystemExit(
-        f"Usage: {package} {'add|init' if package == 'jaxnasium' else 'add'} <item> [output]"
+        f"Usage: {package} {'init|add' if package == 'jaxnasium' else 'add'} <item> [output]"
     )
 
 

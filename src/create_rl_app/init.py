@@ -4,6 +4,7 @@ import json
 import re
 import shutil
 import subprocess
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from .scaffold import _VENDOR_PKG, copy_entry, write_file
@@ -20,25 +21,37 @@ LIGHT_GRAY = "\033[37m"
 _ALGO_CLASSES = {"ppo": "PPO", "sac": "SAC", "dqn": "DQN", "pqn": "PQN"}
 
 
-def _vendored_jaxnasium_root():
+def _jaxnasium_root(*, installed: bool = False):
+    if installed:
+        return pkg_resources.files("jaxnasium")
     return pkg_resources.files(_VENDOR_PKG) / "jaxnasium"
 
 
-def get_vendored_jaxnasium_version() -> str:
-    """Return the vendored jaxnasium version as a plain ``X.Y.Z`` string.
+def _parse_version_string(raw_version: str) -> str:
+    version_text = raw_version.lstrip("v")
+    match = re.match(r"\d+\.\d+\.\d+", version_text)
+    return match.group(0) if match else version_text
 
-    ``.vendor_info["version"]`` may be a `git describe` style string (e.g.
-    ``v0.0.22-115-g7cdcdbe``) when vendored from a local checkout; only the
-    leading release number is a valid PEP 440 version, which is all that's
-    needed for the `>=` floor in `run_uv_add_jaxnasium` anyway.
-    """
-    vendor_info = _vendored_jaxnasium_root() / ".vendor_info"
+
+def get_jaxnasium_version(*, installed: bool = False) -> str:
+    """Return jaxnasium version as a plain ``X.Y.Z`` string for dependency pins."""
+    if installed:
+        try:
+            return _parse_version_string(version("jaxnasium"))
+        except PackageNotFoundError as e:
+            raise RuntimeError("Installed jaxnasium version not found") from e
+
+    vendor_info = _jaxnasium_root(installed=False) / ".vendor_info"
     try:
-        version = json.loads(vendor_info.read_text())["version"].lstrip("v")
+        raw_version = json.loads(vendor_info.read_text())["version"]
     except (FileNotFoundError, KeyError, json.JSONDecodeError) as e:
         raise RuntimeError(f"Vendored jaxnasium version not found: {e}") from e
-    match = re.match(r"\d+\.\d+\.\d+", version)
-    return match.group(0) if match else version
+    return _parse_version_string(raw_version)
+
+
+def get_vendored_jaxnasium_version() -> str:
+    """Return the vendored jaxnasium version (backward-compatible alias)."""
+    return get_jaxnasium_version(installed=False)
 
 
 def colored_input(prompt, default=""):
@@ -90,9 +103,11 @@ def run_uv_init(projectname: str) -> None:
         )
 
 
-def run_uv_add_jaxnasium(project_path: Path) -> None:
-    version = get_vendored_jaxnasium_version()
-    command = _uv_or_pipx("add", "--quiet", "--no-sync", f"jaxnasium[algs]>={version}")
+def run_uv_add_jaxnasium(project_path: Path, *, installed: bool = False) -> None:
+    jaxnasium_version = get_jaxnasium_version(installed=installed)
+    command = _uv_or_pipx(
+        "add", "--quiet", "--no-sync", f"jaxnasium[algs]>={jaxnasium_version}"
+    )
     subprocess.run(command, check=True, cwd=project_path)
 
 
@@ -127,20 +142,28 @@ def render_init_file(package_name: str, env_module: str, env_class: str | None) 
     )
 
 
-def render_env_template(env_class: str) -> str:
-    template = _vendored_jaxnasium_root() / "cli" / "_resources" / "env_template.py"
+def render_env_template(env_class: str, *, installed: bool = False) -> str:
+    template = (
+        _jaxnasium_root(installed=installed) / "cli" / "_resources" / "env_template.py"
+    )
     return replace_all(template.read_text(), {"ExampleEnv": env_class})
 
 
 def render_train_template(
     *,
     package_name: str,
-    env_class: str | None,
+    env_id: str,
     algorithm: str,
     algorithm_source: bool,
+    installed: bool = False,
 ) -> str:
-    """Render `train.py` from the vendored template and replaces the Algorithm by whatever algorithm is chosen"""
-    template = _vendored_jaxnasium_root() / "cli" / "_resources" / "train_template.py"
+    """Render `train.py` from the jaxnasium template and replace the chosen algorithm."""
+    template = (
+        _jaxnasium_root(installed=installed)
+        / "cli"
+        / "_resources"
+        / "train_template.py"
+    )
     text = template.read_text()
     algo = _ALGO_CLASSES[algorithm]
     algorithms_module = (
@@ -153,15 +176,16 @@ def render_train_template(
     )
     text = text.replace("# RL Training", f"# RL Training with {algo}")
 
-    if env_class:
-        text = f"import {package_name}  # noqa: F401  (registers {env_class})\n" + text
-        text = text.replace('jym.make("CartPole-v1")', f'jym.make("{env_class}")')
+    text = f"import {package_name}  # noqa: F401  (registers {env_id})\n" + text
+    text = text.replace('jym.make("CartPole-v1")', f'jym.make("{env_id}")')
 
     return text
 
 
-def copy_algorithm_source(algorithm: str, target_dir: Path) -> None:
-    copy_entry(_vendored_jaxnasium_root(), algorithm, str(target_dir))
+def copy_algorithm_source(
+    algorithm: str, target_dir: Path, *, installed: bool = False
+) -> None:
+    copy_entry(_jaxnasium_root(installed=installed), algorithm, str(target_dir))
 
 
 def print_banner() -> None:
@@ -182,7 +206,7 @@ def print_banner() -> None:
     print(f"{RESET}")
 
 
-def main(argv=None):
+def main(argv=None, *, use_installed_jaxnasium: bool = False):
     parser = argparse.ArgumentParser(description="Initialize a new jaxnasium project.")
     parser.add_argument("projectname", help="The path to the new project directory.")
     parser.add_argument(
@@ -209,6 +233,15 @@ def main(argv=None):
         default="ppo",
         help="Algorithm to set up the training script with (default: ppo).",
     )
+    DEFAULT_ENVIRONMENT = "CartPole-v1"  # set if --env-template is not set
+    parser.add_argument(
+        "--environment",
+        default=argparse.SUPPRESS,
+        help=(
+            "Environment id passed to jym.make(...) when no custom env template is "
+            f"included (defaults to: {DEFAULT_ENVIRONMENT})."
+        ),
+    )
     args = parser.parse_args(argv)
 
     print_banner()
@@ -219,19 +252,25 @@ def main(argv=None):
     projectname = projectname.lower()
 
     print(
-        f"{LIGHT_GRAY}Setting up a new Jaxnasium project (v{get_vendored_jaxnasium_version()}){RESET}"
+        f"{LIGHT_GRAY}Setting up a new Jaxnasium project "
+        f"(v{get_jaxnasium_version(installed=use_installed_jaxnasium)}){RESET}"
     )
     print(f"{LIGHT_GRAY}{'─' * 60}{RESET}\n")
     print(f"{LIGHT_GRAY}Project name: {projectname}{RESET}")
 
     ########## Questions ##########
 
-    build_env = ask_bool(
-        "Would you like to include an environment template?",
-        "y",
-        args.env_template,
-        args.yes,
-    )
+    if "environment" not in args:
+        build_env = ask_bool(
+            "Would you like to include an environment template?",
+            "y",
+            args.env_template,
+            args.yes,
+        )
+        if not build_env:
+            args.environment = DEFAULT_ENVIRONMENT
+    else:
+        build_env = False
     include_algorithm_source = ask_bool(
         "Instead of importing, would you like to copy the algorithm source code into your project?",
         "n",
@@ -243,6 +282,10 @@ def main(argv=None):
     print(f"  • Project name: {projectname}")
     print(f"  • Algorithm: {_ALGO_CLASSES[args.algorithm]}")
     print(f"  • Include environment template: {'Yes' if build_env else 'No'}")
+    if build_env:
+        print(f"  • Environment: {pascal_case(projectname)}Env (custom template)")
+    else:
+        print(f"  • Environment: {args.environment}")
     print(
         f"  • Copy algorithm source code: {'Yes' if include_algorithm_source else 'No'}"
     )
@@ -259,7 +302,7 @@ def main(argv=None):
     project_path = Path(projectname).resolve()
     package_dir = flatten_src_layout(project_path)
     fix_build_backend(project_path)
-    run_uv_add_jaxnasium(project_path)
+    run_uv_add_jaxnasium(project_path, installed=use_installed_jaxnasium)
 
     class_name = pascal_case(package_dir.name)
     env_class = f"{class_name}Env" if build_env else None
@@ -271,18 +314,24 @@ def main(argv=None):
     )
 
     if build_env:
-        write_file(package_dir / f"{env_module}.py", render_env_template(env_class))
+        write_file(
+            package_dir / f"{env_module}.py",
+            render_env_template(env_class, installed=use_installed_jaxnasium),
+        )
 
     if include_algorithm_source:
-        copy_algorithm_source(args.algorithm, package_dir)
+        copy_algorithm_source(
+            args.algorithm, package_dir, installed=use_installed_jaxnasium
+        )
 
     write_file(
         project_path / "train.py",
         render_train_template(
             package_name=package_dir.name,
-            env_class=env_class,
+            env_id=env_class if build_env else args.environment,
             algorithm=args.algorithm,
             algorithm_source=include_algorithm_source,
+            installed=use_installed_jaxnasium,
         ),
     )
 

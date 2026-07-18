@@ -20,8 +20,8 @@ def check_correct_initialized_and_runs(test_dir):
     )
 
 
-def test_cli_legacy_project_arg(tmp_path):
-    """`uvx . <project>` without the `init` subcommand (backward compat)."""
+def test_cli_empty_project_arg(tmp_path):
+    """`uvx . <project>` without the `init` subcommand."""
     test_dir = tmp_path / "test_project"
     subprocess.run(["uvx", "--no-cache", ".", test_dir, "-y"])
     check_correct_initialized_and_runs(test_dir)
@@ -58,15 +58,11 @@ def test_cli_jaxnasium_pipx(tmp_path):
     check_correct_initialized_and_runs(test_dir)
 
 
-def test_cli_no_env_template(tmp_path):
-    test_dir = tmp_path / "test_project"
-    subprocess.run(["uvx", "--no-cache", ".", "init", test_dir, "-y", "--no-env-template"])
-    check_correct_initialized_and_runs(test_dir)
-
-
 def test_cli_algorithm_source(tmp_path):
     test_dir = tmp_path / "test_project"
-    subprocess.run(["uvx", "--no-cache", ".", "init", test_dir, "-y", "--algorithm-source"])
+    subprocess.run(
+        ["uvx", "--no-cache", ".", "init", test_dir, "-y", "--algorithm-source"]
+    )
     check_correct_initialized_and_runs(test_dir)
 
     # Chosen algorithm (default ppo) is copied flat into the package, not
@@ -79,7 +75,9 @@ def test_cli_algorithm_source(tmp_path):
 
 def test_cli_sac(tmp_path):
     test_dir = tmp_path / "test_project"
-    subprocess.run(["uvx", "--no-cache", ".", "init", test_dir, "-y", "--algorithm", "sac"])
+    subprocess.run(
+        ["uvx", "--no-cache", ".", "init", test_dir, "-y", "--algorithm", "sac"]
+    )
     check_correct_initialized_and_runs(test_dir)
 
 
@@ -93,8 +91,27 @@ def test_cli_neither_option(tmp_path):
             "init",
             test_dir,
             "-y",
-            "--no-env-template",
             "--no-algorithm-source",
         ]
     )
+    check_correct_initialized_and_runs(test_dir)
+
+
+def test_cli_environment(tmp_path):
+    test_dir = tmp_path / "test_project"
+    subprocess.run(
+        [
+            "uvx",
+            "--no-cache",
+            ".",
+            "init",
+            test_dir,
+            "--algorithm-source",
+            "--environment",
+            "Pendulum-v1",
+        ]
+    )
+
+    train_py = (test_dir / "train.py").read_text()
+    assert 'jym.make("Pendulum-v1")' in train_py
     check_correct_initialized_and_runs(test_dir)
