@@ -6,13 +6,12 @@ def check_correct_initialized_and_runs(test_dir):
     assert test_dir.exists(), "Project directory wasn't created"
 
     # Check for expected files/folders in the structure
-    expected_files = ["pyproject.toml", "train_example.py", "README.md"]
+    expected_files = ["pyproject.toml", "train.py", "README.md"]
     for file in expected_files:
         assert (test_dir / file).exists(), f"Expected file {file} not found"
 
     # Test running a file from the created structure
-    test_file = "train_example.py"
-    assert (test_dir / test_file).exists(), f"Expected file {test_file} not found"
+    test_file = "train.py"
     run_result = subprocess.run(
         [sys.executable, test_dir / test_file], capture_output=True, text=True
     )
@@ -21,9 +20,16 @@ def check_correct_initialized_and_runs(test_dir):
     )
 
 
-def test_cli_jaxnasium_uvx(tmp_path):
+def test_cli_empty_project_arg(tmp_path):
+    """`uvx . <project>` without the `init` subcommand."""
     test_dir = tmp_path / "test_project"
     subprocess.run(["uvx", "--no-cache", ".", test_dir, "-y"])
+    check_correct_initialized_and_runs(test_dir)
+
+
+def test_cli_jaxnasium_uvx(tmp_path):
+    test_dir = tmp_path / "test_project"
+    subprocess.run(["uvx", "--no-cache", ".", "init", test_dir, "-y"])
     check_correct_initialized_and_runs(test_dir)
 
 
@@ -41,6 +47,7 @@ def test_cli_jaxnasium_pipx(tmp_path):
             "--spec",
             ".",
             "create-rl-app",
+            "init",
             test_dir,
             "-y",
         ],
@@ -51,35 +58,44 @@ def test_cli_jaxnasium_pipx(tmp_path):
     check_correct_initialized_and_runs(test_dir)
 
 
-def test_cli_no_env_template(tmp_path):
+def test_cli_algorithm_source(tmp_path):
     test_dir = tmp_path / "test_project"
     subprocess.run(
-        ["uvx", "--no-cache", ".", test_dir, "-y", "--env-template", "false"]
+        ["uvx", "--no-cache", ".", "init", test_dir, "-y", "--algorithm-source"]
+    )
+    check_correct_initialized_and_runs(test_dir)
+
+    # Chosen algorithm (default ppo) is copied flat into the package, not
+    # nested under an `algorithms/` subfolder.
+    package_dir = test_dir / "test_project"
+    assert (package_dir / "ppo.py").exists()
+    assert (package_dir / "agent_networks.py").exists()
+    assert not (package_dir / "algorithms").exists()
+
+
+def test_cli_sac(tmp_path):
+    test_dir = tmp_path / "test_project"
+    subprocess.run(
+        ["uvx", "--no-cache", ".", "init", test_dir, "-y", "--algorithm", "sac"]
     )
     check_correct_initialized_and_runs(test_dir)
 
 
-def test_cli_no_algorithm_source(tmp_path):
-    test_dir = tmp_path / "test_project"
-    subprocess.run(
-        ["uvx", "--no-cache", ".", test_dir, "-y", "--algorithm-source", "false"]
-    )
-    check_correct_initialized_and_runs(test_dir)
-
-
-def test_cli_neither_option(tmp_path):
+def test_cli_environment(tmp_path):
     test_dir = tmp_path / "test_project"
     subprocess.run(
         [
             "uvx",
             "--no-cache",
             ".",
+            "init",
             test_dir,
             "-y",
-            "--env-template",
-            "false",
-            "--algorithm-source",
-            "false",
+            "--environment",
+            "Pendulum-v1",
         ]
     )
+
+    train_py = (test_dir / "train.py").read_text()
+    assert 'jym.make("Pendulum-v1")' in train_py
     check_correct_initialized_and_runs(test_dir)

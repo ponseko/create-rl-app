@@ -68,7 +68,9 @@ class VendorManager:
                 return f.read().strip()
         return None
 
-    def _save_version_info(self, version: str, commit_sha: str):
+    def _save_version_info(
+        self, version: str, commit_sha: str, local_path: Optional[str] = None
+    ):
         """Save version information to the destination directory."""
         self.destination.mkdir(parents=True, exist_ok=True)
 
@@ -83,6 +85,9 @@ class VendorManager:
             "vendored_at": datetime.now().isoformat(),
             "repository": f"{self.repo_info['owner']}/{self.repo_info['repo']}",
         }
+        if local_path is not None:
+            info["local"] = True
+            info["local_path"] = local_path
         with open(info_file, "w") as f:
             json.dump(info, f, indent=2)
 
@@ -201,6 +206,42 @@ class VendorManager:
                 shutil.copy2(file_path, dst_path)
                 print(f"Vendored: {folder_path}/{rel_path_str} -> {dst_path}")
 
+    def _get_local_version(self, repo_path: Path) -> Tuple[str, str]:
+        """Get version and commit SHA from a local git repository."""
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=repo_path,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            commit_sha = result.stdout.strip()
+
+            result = subprocess.run(
+                ["git", "describe", "--tags", "--always"],
+                cwd=repo_path,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            version = result.stdout.strip()
+
+            return version, commit_sha
+        except subprocess.CalledProcessError:
+            return "local", "unknown"
+
+    def _clear_destination(self):
+        """Remove previously vendored files before re-vendoring."""
+        if not self.destination.exists():
+            return
+
+        for item in self.destination.iterdir():
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
+
     def _vendor_files(self, repo_path: Path):
         """Copy specified files and folders from repository to destination."""
         self.destination.mkdir(parents=True, exist_ok=True)
@@ -257,6 +298,25 @@ class VendorManager:
             print(f"Error during update: {e}")
             return False
 
+    def vendor_from_local(self, local_path: str) -> bool:
+        """Vendor files from a local repository path."""
+        repo_path = Path(local_path).expanduser().resolve()
+        if not repo_path.exists():
+            raise FileNotFoundError(f"Local repository path not found: {repo_path}")
+        if not repo_path.is_dir():
+            raise NotADirectoryError(f"Local path is not a directory: {repo_path}")
+
+        print(f"Vendoring from local repository: {repo_path}")
+
+        version, commit_sha = self._get_local_version(repo_path)
+        print(f"Local version: {version} (commit: {commit_sha[:8]})")
+
+        self._clear_destination()
+        self._vendor_files(repo_path)
+        self._save_version_info(version, commit_sha, local_path=str(repo_path))
+        print(f"Successfully vendored from local path ({version})")
+        return True
+
 
 def main():
     """Main entry point."""
@@ -276,20 +336,35 @@ def main():
         action="store_true",
         help="Only check for updates, don't vendor files",
     )
+    parser.add_argument(
+        "--local",
+        metavar="PATH",
+        help="Vendor from a local repository path instead of GitHub",
+    )
 
     args = parser.parse_args()
 
     try:
         vendor_manager = VendorManager(args.config)
 
-        if args.check_only:
+        if args.local:
+            if args.check_only:
+                repo_path = Path(args.local).expanduser().resolve()
+                version, commit_sha = vendor_manager._get_local_version(repo_path)
+                current_version = vendor_manager._get_current_version()
+                print(f"Local version: {version} (commit: {commit_sha[:8]})")
+                print(f"Current version: {current_version or 'None'}")
+                return 0
+
+            updated = vendor_manager.vendor_from_local(args.local)
+        elif args.check_only:
             version, commit_sha = vendor_manager._get_latest_version()
             current_version = vendor_manager._get_current_version()
             print(f"Latest version: {version} (commit: {commit_sha[:8]})")
             print(f"Current version: {current_version or 'None'}")
             return 0
-
-        updated = vendor_manager.check_and_update(args.force)
+        else:
+            updated = vendor_manager.check_and_update(args.force)
         # Always return 0 (success), but print the update status for the workflow
         if updated:
             print("VENDOR_UPDATED=true")

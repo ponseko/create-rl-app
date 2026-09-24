@@ -8,6 +8,7 @@ vendor:
     # Files and folders to vendor (relative to repository root)
     files:
         - "LICENSE"
+        - "src/jaxnasium/create-rl-app.toml"
     
     # Folders to vendor with inclusion/exclusion patterns
     folders:
@@ -16,13 +17,30 @@ vendor:
           include:
             - "*.py"
             - "*.pyi"
+            - "__init__.py"
           # Exclude patterns (glob patterns, relative to folder path)
           exclude:
+            # - "__init__.py"
             - "utils"
+            - "experimental"
+            - "core"
+            # - "_algorithm.py"
             - "test_*.py"
             - "*_test.py"
             - "__pycache__"
+            # - "_algorithm.py"
             - "*.pyc"
+          # Preserve directory structure (default: true)
+          preserve_structure: true
+
+        - path: "src/jaxnasium/cli"
+          # Include patterns (glob patterns, relative to folder path)
+          include:
+            - "_resources/*.py"
+            - "_resources/*.pyi"
+          # Exclude patterns (glob patterns, relative to folder path)
+          exclude:
+            - "__pycache__"
           # Preserve directory structure (default: true)
           preserve_structure: true
 

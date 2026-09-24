@@ -8,22 +8,21 @@ A CLI application to bootstrap reinforcement learning applications within the Ja
 
 ## What it does
 
-`create-rl-app` is a command-line tool that helps you quickly set up new reinforcement learning projects using the Jaxnasium framework. It creates a well-structured project template with:
+`create-rl-app` is a command-line tool that helps you quickly set up new reinforcement learning projects using the Jaxnasium framework. It has three commands:
 
-- 🚀 **Quick Setup**: Get a new RL project running in seconds
-- 🏗️ **Helpful Templates**: Templates for environments and algorithms for you to start with.
-- ⚡ **Performance Optimized**: Sets you up with PureJaxRL compatible agents and environments for performance and GPU scalability.
+- `create-rl-app init <project_name>` - bootstrap a new project (`uv init --package` + `uv add jaxnasium` + a training script and, optionally, an example environment and algorithm source code).
+- `create-rl-app add <item>` - scaffold an individual file (algorithm, architecture, ...) from jaxnasium into the current directory. Run `create-rl-app add --list` to see what's available.
+- `<package> add <item>` - the same, but for any other installed package that ships its own `create-rl-app.toml` (e.g. `uvx jaxnasium add ppo`).
 
 ## Useage
 
 ### uvx (Recommended)
 
 ```bash
-uvx create-rl-app <project_name>
+uvx create-rl-app init <project_name>
 cd <project_name>
-uv run train_example.py
+uv run train.py
 ```
-
 ### pipx
 
 ```bash
@@ -31,7 +30,7 @@ pipx run create-rl-app <project_name>
 cd <project_name>
 # Create a new environment (e.g. conda, venv, etc.)
 # source .../bin/activate
-python train_example.py
+python train.py
 ```
 
 ### Or Install Globally
